@@ -94,7 +94,7 @@ void client(const char *input_file) {
                         packet.type = PUT;
                         printf("Transmitted:(src = client:1) (%s) (%s)\n", action, commandFile);
                         strcpy(packet.message, commandFile);
-                                                write(client_to_server_fd, &packet, sizeof(Packet));
+                        write(client_to_server_fd, &packet, sizeof(Packet));
                         int i = 0;
                         int j = 0;
                         while(i != 2) {
