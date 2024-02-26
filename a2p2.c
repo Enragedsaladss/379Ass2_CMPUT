@@ -45,18 +45,17 @@ void server() {
 
         while (1) {
                 Packet packet;
-		PutPacket putPacket;
+		PutPacket putPacketServer;
                 Packet response;
-                read(server_to_client_fd, &packet, sizeof(Packet));
+                read(server_to_client_fd, &packet, sizeof(packet));
 		if (packet.type == PUT) {
                         printf("Received from client: %s\n", packet.message);
 			int i = 0;
 			while(i < 3) {
-				read(server_to_client_fd, &putPacket, sizeof(putPacket));
-				printf("What server sees, [%d]:%s\n", putPacket.putLoop, putPacket.arguement);
-				if(putPacket.putLoop < 0)
+				read(server_to_client_fd, &putPacketServer, sizeof(putPacketServer));
+				if(putPacketServer.putLoop < 0)
 					break;
-				printf("[%d]:%s\n", putPacket.putLoop, putPacket.arguement);
+				printf("[%d]:%s\n", putPacketServer.putLoop, putPacketServer.arguement);
 				i++;
 			};
 			
@@ -120,22 +119,21 @@ void client(const char *input_file) {
                                 else    {
 					putPacket.putLoop = j;
                                         strcpy(putPacket.arguement,buffer);
-					printf("What server sees, [%d]:%s\n", putPacket.putLoop, putPacket.arguement);
 					write(client_to_server_fd, &putPacket, sizeof(putPacket));
-                                        printf("[%d]:%s\n", j, buffer);
+                                        printf("[%d]:%s", j, buffer);
                                         j++;
                                 }
                         }
 			putPacket.putLoop = -1;
                 	write(client_to_server_fd, &putPacket, sizeof(putPacket));
-			printf("Server Exited %d", putPacket.putLoop);
+			printf("Server Exited %d\n", putPacket.putLoop);
 		}
 
                 Packet receive;
 
                 write(client_to_server_fd, buffer, strlen(buffer) + 1);
                 read(server_to_client_fd, &receive, sizeof(receive));
-                printf("Received from server: %d", receive.type);
+                printf("Received from server: %d\n", receive.type);
     }
 
     fclose(file);
