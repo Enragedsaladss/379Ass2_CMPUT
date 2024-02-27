@@ -9,8 +9,10 @@
 
 #define FIFO_SERVER_TO_CLIENT "fifo-0-1"
 #define FIFO_CLIENT_TO_SERVER "fifo-1-0"
+#define MAX_LINE_LENGTH 80
 #define MAXWORD 32
-#define MAX_CONTENT_LINES 3
+#define MAX_CONTENT_LINES 4
+#define MAXOBJECT 16
 
 typedef enum {
 	PUT,
@@ -26,15 +28,19 @@ typedef enum {
 
 typedef struct {
     	PacketType type;
-    	char message[MAXWORD];
+    	char message[MAX_LINE_LENGTH];
 } Packet;
 
 typedef struct {
 	int putLoop;
-	char arguement[MAXWORD];
+	char arguement[MAX_LINE_LENGTH];
 } PutPacket;
 
-void Status_Send(int fd_write, PacketType status, char message[MAXWORD]) {
+typedef struct {
+	char lines[MAX_CONTENT_LINES][MAX_LINE_LENGTH];
+} Object;
+
+void Status_Send(int fd_write, PacketType status, char message[MAX_LINE_LENGTH]) {
 	Packet packet;
 	packet.type = status;
 	strcpy(packet.message, message);
@@ -42,10 +48,10 @@ void Status_Send(int fd_write, PacketType status, char message[MAXWORD]) {
 	printf("Transmitted (src= server) (OK)\n\n");
 }
 
-void command_PUT(int fd_Write, int fd_Read, char message[MAXWORD]) {
+void command_PUT(int fd_Write, int fd_Read, int objectCounter, Object *objects[MAXOBJECT], char message[MAX_LINE_LENGTH]) {
   
 	printf("Received (src=client:1) (PUT) (%s)\n", message);
-  
+  	strcpy(objects[objectCounter]->lines[0], message);
 	PutPacket putPacket;
   	int i = 0;
 
@@ -56,16 +62,17 @@ void command_PUT(int fd_Write, int fd_Read, char message[MAXWORD]) {
 			break;
 		
     		printf("[%d]:%s", putPacket.putLoop, putPacket.arguement);
-    		i++; 
+		//strcpy(objects[objectCounter]->lines[i+1], putPacket.arguement);
+		i++; 
 	};
+	objectCounter++;
 	PacketType status = OK;
 	char status_Message[MAXWORD] = "Placement";
 	Status_Send(fd_Write, status, status_Message);
 
 }
 
-
-void command_GET(int fd_Write, int fd_Read, char message[MAXWORD]) {
+void command_GET(int fd_Write, int fd_Read, Object *objects[MAXOBJECT], char message[MAXWORD]) {
   	printf("Received (src=client:1) (GET) (%s)\n", message);
 	PacketType status = OK;
         char status_Message[MAXWORD] = "Placement";
@@ -73,15 +80,13 @@ void command_GET(int fd_Write, int fd_Read, char message[MAXWORD]) {
 
 }
 
-
-void command_DELETE(int fd_Write, int fd_Read, char message[MAXWORD]) {
+void command_DELETE(int fd_Write, int fd_Read, int objectCounter, Object *objects[MAXOBJECT], char message[MAXWORD]) {
  	printf("Received (src=client:1) (DELETE) (%s)\n", message);
 	PacketType status = OK;
         char status_Message[MAXWORD] = "Placement";
         Status_Send(fd_Write, status, status_Message);
 
 }
-
 
 void command_GTIME(int fd_Write, int fd_Read, char message[MAXWORD]) {
   	printf("return time here\n");
@@ -90,7 +95,6 @@ void command_GTIME(int fd_Write, int fd_Read, char message[MAXWORD]) {
         Status_Send(fd_Write, status, status_Message);
 
 }
-
 
 void command_DELAY(int fd_Write, int fd_Read, char message[MAXWORD]) {
   	printf("Received (src=client:1) (DELAY) (%s)\n", message);
@@ -102,9 +106,10 @@ void command_DELAY(int fd_Write, int fd_Read, char message[MAXWORD]) {
 
 void server() {
 
-        int server_to_client_fd, client_to_server_fd;
+        int server_to_client_fd, client_to_server_fd, objectCounter = 0;
         char buffer[BUFSIZ];
-
+	Object *objects[MAXOBJECT];
+	
         mkfifo("fifo-0-1", 0666);
         mkfifo("fifo-1-0", 0666);
 	printf("Server Start.\n");
@@ -119,13 +124,13 @@ void server() {
 
 		switch (packet.type) {
             		case PUT:
-              			command_PUT(server_to_client_fd, client_to_server_fd, packet.message);
+              			command_PUT(server_to_client_fd, client_to_server_fd, objectCounter, objects, packet.message);
               			break;
             		case GET:
-              			command_GET(server_to_client_fd, client_to_server_fd, packet.message);
+              			command_GET(server_to_client_fd, client_to_server_fd, objects, packet.message);
              			break;
             		case DELETE:
-              			command_DELETE(server_to_client_fd, client_to_server_fd, packet.message);
+              			command_DELETE(server_to_client_fd, client_to_server_fd, objectCounter, objects, packet.message);
               			break;
             		case GTIME:
               			command_GTIME(server_to_client_fd, client_to_server_fd, packet.message);
