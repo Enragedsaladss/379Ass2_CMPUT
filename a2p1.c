@@ -9,7 +9,7 @@ int delay;
 int nLine;
 
 void alarm_handler(int signo) {
-	
+		
 	int timed_out = 0;
 	printf("*** Entering delay period of %d msec\n\n", delay);
   	
@@ -47,22 +47,23 @@ void alarm_handler(int signo) {
   	}
  	
        	else {
-    		FILE *fp = popen(command, "r");
+   	 	FILE *fp = popen(command, "r");
     
 		if (fp == NULL) {
       			perror("Error executing command");
     		}
     		
 		else {
-      			char buffer[256];
-      
+    			char buffer[256];
+     
 			while (fgets(buffer, sizeof(buffer), fp) != NULL) {
-        			
+        		
 				printf("%s", buffer);
       			}
-      			pclose(fp);
+     			pclose(fp);
     		}
-  	}	
+  	}
+		
 }
 
 int main(int argc, char *argv[]) {
