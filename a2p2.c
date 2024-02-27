@@ -37,6 +37,7 @@ typedef struct {
 } PutPacket;
 
 typedef struct {
+	int values;
 	char lines[MAX_CONTENT_LINES][MAX_LINE_LENGTH];
 } Object;
 
@@ -45,7 +46,6 @@ void Status_Send(int fd_write, PacketType status, char message[MAX_LINE_LENGTH])
 	packet.type = status;
 	strcpy(packet.message, message);
 	write(fd_write, &packet, sizeof(Packet));
-	printf("Transmitted (src= server) (OK)\n\n");
 }
 
 void command_PUT(int fd_Write, int fd_Read, int *objectCounter, Object *objects[MAXOBJECT], char message[MAX_LINE_LENGTH]) {
@@ -67,44 +67,73 @@ void command_PUT(int fd_Write, int fd_Read, int *objectCounter, Object *objects[
 		strcpy(objects[*objectCounter]->lines[i+1], putPacket.arguement);
 		i++; 
 	};
-
+	objects[*objectCounter]->values = i;
 	*objectCounter += 1;
-	PacketType status = OK;
-	char status_Message[MAXWORD] = "Placement";
-	Status_Send(fd_Write, status, status_Message);
 
+	PacketType status = OK;
+	char status_Message[MAXWORD] = "";
+	Status_Send(fd_Write, status, status_Message);
+	printf("\n");
 }
 
-void command_GET(int fd_Write, int fd_Read, Object *objects[MAXOBJECT], char message[MAXWORD]) {
+void command_GET(int fd_Write, int fd_Read, int *objectCounter, Object *objects[MAXOBJECT], char message[MAXWORD]) {
   	printf("Received (src=client:1) (GET) (%s)\n", message);
+	PacketType status = ERROR;
+	PutPacket putPacket;
+	char status_Message[MAX_LINE_LENGTH];
+
+	for (int i = 0; i < *objectCounter; i++) {
 	
-	
-	PacketType status = OK;
-        char status_Message[MAXWORD] = "Placement";
-        Status_Send(fd_Write, status, status_Message);
+		if(strcmp(objects[i]->lines[0], message) == 0) {
+			status = OK;
+			Status_Send(fd_Write, status, message);
+			printf("Transmitted (src= server) (OK) (%s)\n", message);
+			int k = 0;
+		
+			while(k < objects[i]->values) {
+				putPacket.putLoop = k;
+				strcpy(putPacket.arguement, objects[i]->lines[k+1]);
+				printf("[%d]:%s", putPacket.putLoop, putPacket.arguement);
+				write(fd_Write, &putPacket, sizeof(putPacket));	
+				k++;
+			}
+			putPacket.putLoop = -1;
+			write(fd_Write, &putPacket, sizeof(putPacket));
+			break;
+		}
+		
+	}
+	if(status == ERROR) {
+		strcpy(status_Message,"object not found");
+		Status_Send(fd_Write, status, status_Message);
+		printf("Transmitted (src= source) (Error: %s)\n\n", status_Message);
+	}
+	else {
+		printf("\n");
+	}
 
 }
 
 void command_DELETE(int fd_Write, int fd_Read, int *objectCounter, Object *objects[MAXOBJECT], char message[MAXWORD]) {
- 	printf("Received (src=client:1) (DELETE) (%s)\n", message);
+ 	printf("Received (src=client:1) (DELETE) (%s)\n\n", message);
 	PacketType status = OK;
-        char status_Message[MAXWORD] = "Placement";
-        Status_Send(fd_Write, status, status_Message);
+        char status_Message[MAXWORD] = "";
+        //Status_Send(fd_Write, status, status_Message);
 }
 
 void command_GTIME(int fd_Write, int fd_Read, char message[MAXWORD]) {
   	printf("return time here\n");
 	PacketType status = OK;
-        char status_Message[MAXWORD] = "Placement";
-        Status_Send(fd_Write, status, status_Message);
+        char status_Message[MAXWORD] = "";
+        //Status_Send(fd_Write, status, status_Message);
 
 }
 
 void command_DELAY(int fd_Write, int fd_Read, char message[MAXWORD]) {
   	printf("Received (src=client:1) (DELAY) (%s)\n", message);
 	PacketType status = OK;
-        char status_Message[MAXWORD] = "Placement";
-        Status_Send(fd_Write, status, status_Message);
+        char status_Message[MAXWORD] = "";
+        //Status_Send(fd_Write, status, status_Message);
 
 }
 
@@ -137,7 +166,7 @@ void server() {
               			command_PUT(server_to_client_fd, client_to_server_fd, &objectCounter, objects, packet.message);
               			break;
             		case GET:
-              			command_GET(server_to_client_fd, client_to_server_fd, objects, packet.message);
+              			command_GET(server_to_client_fd, client_to_server_fd,&objectCounter,  objects, packet.message);
              			break;
             		case DELETE:
               			command_DELETE(server_to_client_fd, client_to_server_fd, &objectCounter, objects, packet.message);
@@ -165,7 +194,7 @@ void server() {
         close(client_to_server_fd);
 }
 
-void client_PUT(int fd_write, int fd_read, char message[MAXWORD], FILE *file) {
+void client_PUT(int fd_Write, int fd_Read, char message[MAXWORD], FILE *file) {
   	Packet packet;
 	packet.type = PUT;
  	char buffer[BUFSIZ];
@@ -173,7 +202,7 @@ void client_PUT(int fd_write, int fd_read, char message[MAXWORD], FILE *file) {
 	printf("Transmitted:(src = client:1) (PUT) (%s)\n", message);
   	strcpy(packet.message, message);
 
-	write(fd_write, &packet, sizeof(Packet));
+	write(fd_Write, &packet, sizeof(Packet));
                         
 	int i = 0;
  	int j = 0;
@@ -187,41 +216,64 @@ void client_PUT(int fd_write, int fd_read, char message[MAXWORD], FILE *file) {
 		else {
 			putPacket.putLoop = j;
       			strcpy(putPacket.arguement,buffer);
-			write(fd_write, &putPacket, sizeof(PutPacket));
+			write(fd_Write, &putPacket, sizeof(PutPacket));
       			printf("[%d]:%s", j, buffer);
       			j++;
     		}	
   	}
 	putPacket.putLoop = -1;
-  	write(fd_write, &putPacket, sizeof(putPacket));
+  	write(fd_Write, &putPacket, sizeof(putPacket));
+	read(fd_Read, &packet, sizeof(packet));
+	printf("Received (src=server) (OK)\n\n");
 }
 
-void client_GET(int fd_write, int fd_read, char message[MAXWORD]) {
+void client_GET(int fd_Write, int fd_Read, char message[MAXWORD]) {
   	Packet packet;
 	packet.type = GET;
 	strcpy(packet.message, message);
-	write(fd_write, &packet, sizeof(Packet));
-	printf("Transmitted:(src = client:1) (GET (%s)\n", message);
-}
+	write(fd_Write, &packet, sizeof(Packet));
+	printf("Transmitted:(src = client:1) (GET) (%s)\n", message);
+	PutPacket putPacket;
+  	
+	int i = 0;
+	read(fd_Read, &packet, sizeof(packet));
+	if(packet.type == OK) {
+		printf("Received (src= server) (OK)\n");
+  		while(1) {
+			read(fd_Read, &putPacket, sizeof(PutPacket));
 
+			if(putPacket.putLoop < 0)
+				break;
+    			
+			printf("[%d]:%s", putPacket.putLoop, putPacket.arguement); 
+		};
+	}
+	else if (packet.type == ERROR) {
+		printf("Received (src= server (ERROR: %s)\n\n", packet.message);
+	}
+	else {
+		printf("Unknown\n\n");
+	}
+	printf("\n");
+}
 
 void client_DELETE(int fd_write, int fd_read, char message[MAXWORD]) {
   	Packet packet;
 	packet.type = DELETE;
   	strcpy(packet.message,message);
 	write(fd_write, &packet, sizeof(Packet));
-	printf("Transmitted:(src = client:1) (DELETE) (%s)\n", message);
+	printf("Transmitted:(src= client:1) (DELETE) (%s)\n", message);	
+	printf("Received: (src= server) (OK)\n\n");
 }
-
 
 void client_GTIME(int fd_write, int fd_read, char message[MAXWORD]) {
  	Packet packet;
 	packet.type = GTIME;
   	strcpy(packet.message,message);
 	write(fd_write, &packet, sizeof(Packet));
-	printf("Transmitted:(src = client:1) (GTIME) (%s)\n", message);
+	printf("Transmitted:(src= client:1) (GTIME) (%s)\n", message);
+	printf("Received: (src= server)(TIME: )\n\n");
 }
-
 
 void client_DELAY(int fd_write, int fd_read, char message[MAXWORD]) {
   	Packet packet;
@@ -229,6 +281,7 @@ void client_DELAY(int fd_write, int fd_read, char message[MAXWORD]) {
 	strcpy(packet.message,message);
 	write(fd_write, &packet, sizeof(Packet));
 	printf("Transmitted:(src = client:1) (DELAY) (%s)\n", message);
+	printf("***Exiting Delay period\n\n");
 }
 
 void Status_Check(int fd_read){
@@ -254,6 +307,7 @@ void client(const char *input_file) {
     	client_to_server_fd = open(FIFO_CLIENT_TO_SERVER, O_WRONLY);
 
     	file = fopen(input_file, "r");
+
     	if (!file) {
         	perror("Error opening file");
         	exit(EXIT_FAILURE);
@@ -296,7 +350,6 @@ void client(const char *input_file) {
 			strcpy(packet.message,"\n");
 			write(client_to_server_fd, &packet, sizeof(Packet));
 		  }
-    	Status_Check(server_to_client_fd);
     }
     
     fclose(file);
