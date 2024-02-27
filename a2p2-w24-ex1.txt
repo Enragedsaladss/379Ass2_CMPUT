@@ -27,8 +27,7 @@
 1 get video1.mp4
 1 get img1.jpg
 1 get index2.html
-1 delete img2.jpg
+1 delete img1.jpg
 1 delay 3000
-
 1 gtime
 1 quit
