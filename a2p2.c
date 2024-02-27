@@ -277,7 +277,6 @@ void client(const char *input_file) {
 			packet.type = QUIT;
 			strcpy(packet.message,"\n");
 			write(client_to_server_fd, &packet, sizeof(Packet));
-		    	printf("Something to do with quit");
 		  }
     	Status_Check(server_to_client_fd);
     }
