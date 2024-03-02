@@ -147,8 +147,10 @@ void server_DELETE(int fd_Write, int *object_Counter, Object *objects[MAXOBJECT]
 		status = OK;
 		strcpy(status_Message, "");
 		for (int i = found; i < *object_Counter; i++) {
-			objects[i] = objects[i+1];
+			*objects[i] = *objects[i+1];
 		}
+
+
 		status_send(fd_Write, status, status_Message);
 		*object_Counter--;
 		printf("Transmitted (src= server) (OK)\n\n");
