@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include <poll.h>
 
 #define MAX_LINE_LENGTH 80
 #define MAXWORD 32
@@ -187,69 +188,81 @@ void server_GTIME(int fd_Write, struct timespec *start, Packet packet) {
 }
 
 void server() {
+	printf("Server Start.\n");
 	struct timespec start;
 	clock_gettime(CLOCK_REALTIME, &start);	
-	int server_to_client_fds[MAXCLIENTS], client_to_server_fds[MAXCLIENTS];
+	int server_to_client_fds[MAXCLIENTS];
 	char server_to_client_fd[10], client_to_server_fd[10];
 	int object_Counter = 0, max_fd = 0;
         char buffer[BUFSIZ];
-	struct timeval timeout;
 	Object *objects[MAXOBJECT];
-	fd_set readfds;
-
-	FD_ZERO(&readfds);
-	
-	timeout.tv_sec = 5;
-	timeout.tv_usec = 0;
+	struct pollfd client_to_server_fds[MAXCLIENTS+1];	
 
 	for (int i = 0; i < 16; i++) {
         	objects[i] = (Object *)malloc(sizeof(Object));
 	}
+
 	for (int i = 0; i < MAXCLIENTS; i++) {
-		printf("test1\n");
 		snprintf(server_to_client_fd, sizeof(FIFOSIZE), "fifo-0-%d", i+1);
 		snprintf(client_to_server_fd, sizeof(FIFOSIZE), "fifo-%d-0", i+1);	
 		mkfifo(server_to_client_fd, 0666);
 		mkfifo(client_to_server_fd, 0666);
+		
 		server_to_client_fds[i] = open(server_to_client_fd, O_WRONLY);
-        	client_to_server_fds[i] = open(client_to_server_fd, O_RDONLY);
-		FD_SET(client_to_server_fds[i], &readfds);
-		printf("test2\n");
-		if (client_to_server_fds[i] > max_fd) {
-            		max_fd = client_to_server_fds[i];
-        	}		
+        	client_to_server_fds[i].fd = open(client_to_server_fd, O_RDONLY);
+		client_to_server_fds[i].events = POLLIN;
 	}
 	
+	client_to_server_fds[MAXCLIENTS+1].fd = STDIN_FILENO;
+	client_to_server_fds[MAXCLIENTS+1].events = POLLIN;
 
-	printf("Server Start.\n");
-	
 	while (1) {
+		
                	Packet packet;  
+		int event;
 
-		int activity = select(max_fd + 1, &readfds, NULL, NULL, &timeout);
-		if (activity = -1) {
-			break;
-		}
+		event = poll(client_to_server_fds, MAXCLIENTS+1, -1);
+	
+		if(client_to_server_fds[MAXCLIENTS+1].revents & POLLIN) {
+			char command[10];
+			printf("Keyboard detected\n");
+			scanf("%s", command);
+			if(strcmp(command, "list") == 0) {
+				printf("Stored object table:\n");
+				for (int i = 0; i < object_Counter; i++) {
+					printf("owner= %d, name= %s\n", objects[i]->client_id, objects[i]->lines[0]);
+					for (int k = 0; k < objects[i]->values; k++ ) {
+						printf("[%d]:%s", k, objects[i]->lines[k]);
+					}
+				}
+			}
+
+			else if (strcmp(command, "quit") == 0) {
+				printf("QUIT\n");
+				break;
+			}
+
+			else {
+				printf("Unknown\n");
+			}
+		}	
 
 		for(int i = 0; i<MAXCLIENTS; i++) {
-			if (FD_ISSET(client_to_server_fds[i], &readfds)) {
-           			read(client_to_server_fds[i], &packet, sizeof(Packet));
+			if (client_to_server_fds[i].revents & POLLIN) {
+           			read(client_to_server_fds[i].fd, &packet, sizeof(Packet));
 
 				switch (packet.type) {
             				case PUT:
-              					server_PUT(server_to_client_fds[i], client_to_server_fds[i], &object_Counter, objects, packet);
+              					server_PUT(server_to_client_fds[i], client_to_server_fds[i].fd, &object_Counter, objects, packet);
               					break;
             				case GET:
-              					server_GET(server_to_client_fds[i], client_to_server_fds[i], &object_Counter, objects, packet);
+              					server_GET(server_to_client_fds[i], client_to_server_fds[i].fd, &object_Counter, objects, packet);
              					break;
             				case DELETE:
               					server_DELETE(server_to_client_fds[i], &object_Counter, objects, packet);
               					break;
             				case GTIME:
               					server_GTIME(server_to_client_fds[i], &start, packet);
-              					break;
-            				case QUIT:
-              					printf("Exiting\n");
               					break;
             				default:
              					printf("Unknown");
@@ -262,10 +275,13 @@ void server() {
 	for (int j = 0; j < 16; j++) {
                 free(objects[j]);
 	}
+
 	for (int i = 0; i < MAXCLIENTS; i++) {
                 close(server_to_client_fds[i]);
-                close(client_to_server_fds[i]);
+                close(client_to_server_fds[i].fd);
         }
+
+	printf("Shutting down\n");
 }
 
 void client_PUT(int fd_Write, int fd_Read, Packet packet, FILE *file) {
@@ -388,7 +404,7 @@ void client(int client_id, const char *input_file) {
 
 	snprintf(server_to_client_name, sizeof(FIFOSIZE), "fifo-0-%d", client_id);
 	snprintf(client_to_server_name, sizeof(FIFOSIZE), "fifo-%d-0", client_id);
-	
+
 	server_to_client_fd = open(server_to_client_name, O_RDONLY);
         client_to_server_fd = open(client_to_server_name, O_WRONLY);
 
@@ -439,7 +455,7 @@ void client(int client_id, const char *input_file) {
       		} 
 
 		else if (strcmp(action, "quit") == 0) {
-			
+			break;
 		}
 
 		else {
@@ -454,14 +470,15 @@ void client(int client_id, const char *input_file) {
 
 int main(int argc, char *argv[]) {
     if (argc > 4) {
-        printf("Usage: %s [-s | -c idnumber input_file]\n", argv[0]);
+        printf("Too many arguements. Usage: %s [-s | -c idnumber input_file]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     if (strcmp(argv[1], "-s") == 0 && argc == 2) {
 	server();
-    } else if (strcmp(argv[1], "-c") == 0 && argc == 4 && isdigit(*argv[2]) == 0){
-        client((int) *argv[2], argv[3]);
+    } else if (strcmp(argv[1], "-c") == 0 && argc == 4 ) {
+	int value = atoi(argv[2]);
+	client(value, argv[3]);
     } else {
         printf("Invalid arguments. Usage: %s [-s | -c idnumber input_file]\n", argv[0]);
         exit(EXIT_FAILURE);
