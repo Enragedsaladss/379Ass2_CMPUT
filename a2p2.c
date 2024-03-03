@@ -407,7 +407,7 @@ void client(const char *input_file) {
 		
 		if (idNumber != 1)
         		continue;
-		// Only this gross because strcmp() doesn't work with case statements or so I have read.\  
+		// Only this gross because strcmp() doesn't work with case statements or so I have read.  
 		if (strcmp(action, "put") == 0) {
         		client_PUT(client_to_server_fd, server_to_client_fd, message, file);
       		}
