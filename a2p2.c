@@ -14,6 +14,7 @@
 #define MAX_CONTENT_LINES 4
 #define MAXOBJECT 16
 
+// Types of packet types, I don't believe I used DELAY or QUIT but they are there anyways.
 typedef enum {
 	PUT,
     	GET,
@@ -26,26 +27,32 @@ typedef enum {
     	QUIT
 } PacketType;
 
+// Main type of packet, has the PacketType from above and the message which is being shared.
 typedef struct {
     	PacketType type;
     	char message[MAX_LINE_LENGTH];
 } Packet;
 
+// This is for the lines in Packet, has the number of lines and the message of the lines.
+// Why it is called arguement I will leave to my sleep deprieved self.
 typedef struct {
 	int iteration;
 	char arguement[MAX_LINE_LENGTH];
 } PutPacket;
 
+// For the time because time needs to be a double.
 typedef struct {
 	PacketType type;
 	double time;
 }TimePacket;
 
+// This is for storing all the information sent from client. Only saved on the server.
 typedef struct {
 	int values;
 	char lines[MAX_CONTENT_LINES][MAX_LINE_LENGTH];
 } Object;
 
+// Specifically for the status checks sent by the server.
 void status_send(int fd_Write, PacketType status, char message[MAX_LINE_LENGTH]) {
 	Packet packet;
 	packet.type = status;
@@ -53,6 +60,7 @@ void status_send(int fd_Write, PacketType status, char message[MAX_LINE_LENGTH])
 	write(fd_Write, &packet, sizeof(Packet));
 }
 
+// Find if the message has been saved by the server.
 int server_find(int *object_Counter, Object *objects[MAXOBJECT], char message[MAXWORD]) {
         for(int i = 0; i <*object_Counter; i++) {
                 if (strcmp(objects[i]->lines[0], message) == 0)
@@ -61,22 +69,25 @@ int server_find(int *object_Counter, Object *objects[MAXOBJECT], char message[MA
         return -1;
 }
 
+// Puts the information sent by the client into the object structure.
 void server_PUT(int fd_Write, int fd_Read, int *object_Counter, Object *objects[MAXOBJECT], char message[MAX_LINE_LENGTH]) {
   
 	printf("Received (src=client:1) (PUT) (%s)\n", message);
- 	
-	strcpy(objects[*object_Counter]->lines[0], message);
+
 	PutPacket put_Packet;
 	PacketType status; 
 	char status_Message[MAXWORD];	
 	int i = 0;
 	int found = server_find(object_Counter, objects, message);
-	
+
+	// If it hasn't already been stored stores everything
 	if (found < 0 ) {
+		//Stores the initial message first so it is easier to find.
+		strcpy(objects[*object_Counter]->lines[0], message);
 		status = OK;
 		strcpy(status_Message, "");
 		status_send(fd_Write, status, status_Message);
-  		
+  		// For reading and syncing purposes.
 		while(1) {
 			read(fd_Read, &put_Packet, sizeof(PutPacket));
     		
@@ -102,6 +113,7 @@ void server_PUT(int fd_Write, int fd_Read, int *object_Counter, Object *objects[
 	}
 }
 
+// Returns the message and lines to the client if it is found in the server.
 void server_GET(int fd_Write, int fd_Read, int *object_Counter, Object *objects[MAXOBJECT], char message[MAXWORD]) {
   	printf("Received (src=client:1) (GET) (%s)\n", message);
 	
@@ -136,6 +148,7 @@ void server_GET(int fd_Write, int fd_Read, int *object_Counter, Object *objects[
 
 }
 
+// Deletes the information from the object if it has been saved. It will move all the other data up so that there aren't random gaps.
 void server_DELETE(int fd_Write, int *object_Counter, Object *objects[MAXOBJECT], char message[MAXWORD]) {
  	printf("Received (src=client:1) (DELETE) (%s)\n", message);
 	
@@ -146,6 +159,8 @@ void server_DELETE(int fd_Write, int *object_Counter, Object *objects[MAXOBJECT]
 	if (found >=0) {
 		status = OK;
 		strcpy(status_Message, "");
+		// This is so there isn't a gap in the array.
+		// This gave me a lot of grief because I forgot the * and I was double freeing.
 		for (int i = found; i < *object_Counter; i++) {
 			*objects[i] = *objects[i+1];
 		}
@@ -164,6 +179,8 @@ void server_DELETE(int fd_Write, int *object_Counter, Object *objects[MAXOBJECT]
 	}
 }
 
+// Returns the time, I had to use CLOCK_REALTIME because I think it was time() just wouldn't working correctly.
+// I'm so tired but I think this was because CLOCK_TO_SEC wasn't doing the right thing or time() wasn't reading clocks right.
 void server_GTIME(int fd_Write, struct timespec *start, char message[MAXWORD]) {
 	printf("Received (src=client:1) (GTIME)\n");
 	
@@ -179,6 +196,7 @@ void server_GTIME(int fd_Write, struct timespec *start, char message[MAXWORD]) {
 
 }
 
+// Main server loop everything about the server happens here.
 void server() {
 	struct timespec start;
 	clock_gettime(CLOCK_REALTIME, &start);	
@@ -234,6 +252,8 @@ void server() {
         close(client_to_server_fd);
 }
 
+// Client put, reads the message and sends it to the server. Will parse through the lines only sending the lines 
+// that aren't curly brackets.
 void client_PUT(int fd_Write, int fd_Read, char message[MAXWORD], FILE *file) {
   	Packet packet;
 	packet.type = PUT;
@@ -251,6 +271,8 @@ void client_PUT(int fd_Write, int fd_Read, char message[MAXWORD], FILE *file) {
 	read(fd_Read, &packet, sizeof(packet));
 
 	if (packet.type == OK) {
+		// Really strange way of doing this but at the time it was the only way I thought of, there are better ways
+		// but it works so idc
   		while(i != 2) {
     			fgets(buffer, BUFSIZ, file);
     			if (buffer[0] == '{' || buffer[0] == '}')
@@ -281,6 +303,7 @@ void client_PUT(int fd_Write, int fd_Read, char message[MAXWORD], FILE *file) {
 	}
 }
 
+// Asks the server to return the value stored. 
 void client_GET(int fd_Write, int fd_Read, char message[MAXWORD]) {
   	Packet packet;
 	packet.type = GET;
@@ -312,6 +335,7 @@ void client_GET(int fd_Write, int fd_Read, char message[MAXWORD]) {
 	}
 }
 
+// Ya I'm losing it this function doesn't do anything special just send the DELETE packet.
 void client_DELETE(int fd_Write, int fd_Read, char message[MAXWORD]) {
   	Packet packet;
 	packet.type = DELETE;
@@ -348,6 +372,7 @@ void client_DELAY(char message[MAXWORD]) {
 	printf("*** Exiting Delay period\n\n");
 }
 
+// Main client loop all cool client stuff happens here.
 void client(const char *input_file) {
  	printf("Client Started\n");
 	int server_to_client_fd, client_to_server_fd;
@@ -378,10 +403,11 @@ void client(const char *input_file) {
       		Packet packet;
 		
 		sscanf(buffer, "%d %s %s", &idNumber, action, message);
-         
+
+		
 		if (idNumber != 1)
         		continue;
-		  
+		// Only this gross because strcmp() doesn't work with case statements or so I have read.\  
 		if (strcmp(action, "put") == 0) {
         		client_PUT(client_to_server_fd, server_to_client_fd, message, file);
       		}
