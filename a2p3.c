@@ -1,3 +1,7 @@
+// This is all the same code as part two, I did try and make changes in the server
+// and client but I couldn't get past the open() block execution. The code works
+// if all clients are run but there is no keyboard input sadly. I'm am out of time
+// and mental fortitude to continue so I will take what I can get. 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
